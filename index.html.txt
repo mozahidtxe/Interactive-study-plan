@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Study Plan: Strategic Planning</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Calm Harmony -->
+    <!-- Application Structure Plan: The SPA is designed as an interactive dashboard to transform the static study plan into an engaging, task-oriented tool. The structure features a top navigation to switch between the four weeks, preventing information overload from a long scroll. Each week's content is presented in an accordion format, allowing users to focus on one day at a time. The core interactive element is a progress tracker, visualized by a donut chart, which updates as users mark topics "complete." This structure was chosen for its superior usability, providing a clear, focused, and motivating user flow that encourages completion of the learning journey. Gemini API features are integrated directly into daily tasks to provide contextual learning aids without disrupting the primary flow. -->
+    <!-- Visualization & Content Choices: 
+        - Report Info: Overall Progress -> Goal: Motivate -> Viz: Donut Chart -> Interaction: Updates on task completion -> Justification: Provides instant visual feedback on progress, enhancing user motivation. -> Library: Chart.js/Canvas.
+        - Report Info: Weekly Structure -> Goal: Organize/Navigate -> Presentation: Tab-like Navigation -> Interaction: Click to show/hide weekly content sections -> Justification: Breaks down the 28-day plan into manageable, non-linear sections, improving navigation. -> Library/Method: HTML/JS.
+        - Report Info: Daily Topics -> Goal: Organize/Focus -> Presentation: Accordion List -> Interaction: Click to expand/collapse daily details -> Justification: Manages information density and allows users to concentrate on a single learning objective. -> Library/Method: HTML/JS.
+        - Report Info: Task Completion -> Goal: Track -> Presentation: Button/Checkbox -> Interaction: Toggles completion state -> Justification: The primary interaction that makes the plan a functional tool rather than a static document. -> Library/Method: HTML/JS.
+        - Report Info: Complex Concepts -> Goal: Simplify -> Presentation: Button + Modal -> Interaction: Click to call Gemini API and display simplified explanation -> Justification: Provides on-demand clarification of difficult topics, enhancing comprehension. -> Library/Method: Gemini API.
+        - Report Info: Abstract Tools -> Goal: Contextualize -> Presentation: Button + Modal -> Interaction: Click to call Gemini API and generate a localized case study -> Justification: Connects theoretical frameworks to practical, relatable examples. -> Library/Method: Gemini API.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .tab-active { background-color: #0d9488; color: white; }
+        .tab-inactive { background-color: #f1f5f9; color: #475569; }
+        .accordion-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; }
+        .completed-item { background-color: #f0fdfa !important; border-left-color: #0d9488 !important; }
+        .completed-item .completion-button { background-color: #14b8a6 !important; color: white !important; }
+        .completion-icon { display: none; }
+        .completed-item .completion-icon { display: inline-block; }
+        #gemini-modal { display: none; }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #0d9488;
+            animation: spin 1s ease infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-stone-100 text-slate-800">
+
+    <div id="gemini-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 id="gemini-modal-title" class="text-2xl font-bold text-teal-800">✨ Gemini is thinking...</h3>
+                <button id="close-gemini-modal" class="text-3xl font-light text-slate-500 hover:text-slate-800">&times;</button>
+            </div>
+            <div id="gemini-modal-content">
+                <div class="flex justify-center items-center h-48">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container mx-auto p-4 md:p-8 max-w-5xl">
+
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-teal-800">Interactive Study Plan</h1>
+            <p class="text-lg text-slate-600 mt-2">Your 4-Week Journey to Mastering Strategic Planning</p>
+        </header>
+
+        <main id="app-container">
+            
+            <section id="progress-tracker" class="bg-white p-6 rounded-xl shadow-md mb-8">
+                <h2 class="text-xl font-bold text-center mb-4 text-slate-700">Your Progress</h2>
+                 <p class="text-center text-slate-500 mb-4 max-w-2xl mx-auto">Welcome to your interactive guide, now enhanced with AI! Use the "Explain" button for simple definitions or "Generate Case Study" for real-world examples from Bangladesh, all powered by Gemini.</p>
+                <div class="chart-container relative w-full max-w-xs mx-auto h-64">
+                    <canvas id="progressChart"></canvas>
+                </div>
+            </section>
+
+            <nav id="week-navigation" class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-8">
+            </nav>
+
+            <div id="plan-content">
+            </div>
+            
+            <section id="resources" class="bg-white p-6 rounded-xl shadow-md mt-8">
+                <h2 class="text-2xl font-bold mb-4 text-slate-700">Recommended Resources</h2>
+                <p class="text-slate-500 mb-6">These resources, mentioned in the original plan, provide deeper insights. Consider exploring them to supplement your learning throughout the four weeks.</p>
+                <div id="resources-list" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const planData = {
+                weeks: [
+                    {
+                        title: "Week 1: Foundations",
+                        intro: "This week is about building your conceptual framework. You will learn the 'why' behind strategic planning, understanding its core purpose, key phases, and the foundational elements of vision and mission that guide every successful strategy.",
+                        days: [
+                            { id: "intro-strategy", title: "Day 1-2: Intro to Strategy", activity: "Read articles on the definition and importance of strategy. Watch an introductory video on strategic management.", questions: "What is strategy? What is a strategic plan? Why are they crucial for an organization's success?", completed: false },
+                            { id: "planning-process", title: "Day 3-4: The Strategic Planning Process", activity: "Map out the typical strategic planning cycle from analysis to evaluation.", questions: "What are the key phases of strategic planning? Who is typically involved?", completed: false },
+                            { id: "vision-mission", title: "Day 5: Vision, Mission, and Values", activity: "Analyze the vision and mission statements of 2-3 well-known companies (e.g., Google, Tesla, Grameenphone).", questions: "What is the purpose of a vision and mission statement? How do they guide strategy? What makes one effective?", completed: false },
+                            { id: "weekly-review-1", title: "Day 6-7: Weekly Review & Reflection", activity: "Summarize the key concepts learned. Write a short paragraph defining strategic planning in your own words.", questions: "What were the most important concepts I learned this week? What remains unclear?", completed: false }
+                        ]
+                    },
+                    {
+                        title: "Week 2: Analysis",
+                        intro: "This section focuses on the critical analysis phase. Use these interactive modules to assess an organization's internal strengths and weaknesses alongside external opportunities and threats. Completing these will equip you with foundational techniques for strategic decision-making.",
+                        days: [
+                            { id: "swot-analysis", title: "Day 8-9: SWOT Analysis", activity: "Conduct a detailed SWOT analysis for a familiar organization (e.g., your workplace, a local business, or a well-known brand).", questions: "What are the organization's Strengths, Weaknesses, Opportunities, and Threats? How can strengths be leveraged and weaknesses addressed?", completed: false, hasCaseStudy: true },
+                            { id: "pestle-analysis", title: "Day 10-11: PESTLE Analysis", activity: "Perform a PESTLE analysis for an industry you are interested in (e.g., the tech industry in Bangladesh).", questions: "What are the key Political, Economic, Social, Technological, Legal, and Environmental factors affecting this industry?", completed: false, hasCaseStudy: true },
+                            { id: "competitor-analysis", title: "Day 12: Competitor Analysis", activity: "Identify 2-3 key competitors of an organization and analyze their strategies, strengths, and weaknesses.", questions: "Who are the direct and indirect competitors? What is their competitive advantage?", completed: false, hasCaseStudy: true },
+                            { id: "weekly-review-2", title: "Day 13-14: Weekly Review & Synthesis", activity: "Combine your SWOT and PESTLE analyses. How do the external factors (PESTLE) influence the internal ones (SWOT)?", questions: "How does the external environment create opportunities or threats for the organization?", completed: false }
+                        ]
+                    },
+                    {
+                        title: "Week 3: Formulation",
+                        intro: "It's time to move from analysis to action. In this week's modules, you will learn to formulate strategy by setting clear goals, defining measurable objectives (using the SMART framework), and identifying the Key Performance Indicators (KPIs) to track success.",
+                        days: [
+                            { id: "strategic-goals", title: "Day 15-17: Developing Strategic Goals", activity: "Based on your previous analysis, define 3-4 high-level strategic goals for the organization you've been studying.", questions: "What are the most critical issues the organization needs to address? What are its biggest opportunities?", completed: false },
+                            { id: "smart-objectives", title: "Day 18-19: SMART Objectives", activity: "For each strategic goal, create 2-3 SMART objectives (Specific, Measurable, Achievable, Relevant, Time-bound).", questions: "How can the broad goals be broken down into specific, actionable steps? How will success be measured?", completed: false },
+                            { id: "kpis", title: "Day 20: Key Performance Indicators (KPIs)", activity: "Identify at least one KPI for each SMART objective you've set.", questions: "What specific metrics will indicate progress towards an objective?", completed: false },
+                            { id: "weekly-review-3", title: "Day 21: Weekly Review & Plan Drafting", activity: "Start drafting a mock strategic plan document using the goals, objectives, and KPIs you've developed.", questions: "Is there a clear, logical link between the analysis, goals, objectives, and KPIs?", completed: false }
+                        ]
+                    },
+                    {
+                        title: "Week 4: Implementation",
+                        intro: "A plan is only as good as its execution. This final week focuses on bringing your strategy to life. You'll explore how to create action plans, allocate resources, and, most importantly, how to monitor, evaluate, and adapt the plan to ensure it remains relevant and effective.",
+                        days: [
+                            { id: "implementation", title: "Day 22-23: Strategy Implementation", activity: "Brainstorm the resources (financial, human, technological) needed to achieve the objectives. Create a simple action plan.", questions: "Who is responsible for each objective? What are the key action steps and deadlines? What are the potential obstacles to implementation?", completed: false },
+                            { id: "monitoring", title: "Day 24-25: Monitoring & Evaluation", activity: "Outline a process for reviewing progress on the plan (e.g., quarterly reviews).", questions: "How will the organization track its KPIs? How will it adapt the plan if it's not working?", completed: false },
+                            { id: "case-study", title: "Day 26-27: Case Study & Final Project", activity: "Read a detailed case study of a company's strategic success or failure. Finalize your mock strategic plan document.", questions: "What can be learned from real-world examples? Can I now create a cohesive and logical strategic plan from start to finish?", completed: false },
+                            { id: "final-review", title: "Day 28: Final Review & Next Steps", activity: "Review your entire study journey. Identify areas for further learning.", questions: "What are my key takeaways? How can I apply this knowledge in my career or studies?", completed: false }
+                        ]
+                    }
+                ],
+                resources: [
+                    { type: 'Articles', items: ['Harvard Business Review', 'McKinsey Insights', 'Forbes'] },
+                    { type: 'Books', items: ['"Good to Great" by Jim Collins', '"The Art of War" by Sun Tzu', '"Competitive Strategy" by Michael Porter'] },
+                    { type: 'Online Courses', items: ['Coursera', 'edX', 'LinkedIn Learning'] }
+                ]
+            };
+
+            let currentWeekIndex = 0;
+            let progressChart;
+
+            const navContainer = document.getElementById('week-navigation');
+            const planContainer = document.getElementById('plan-content');
+            const resourcesContainer = document.getElementById('resources-list');
+            const chartCanvas = document.getElementById('progressChart').getContext('2d');
+            const geminiModal = document.getElementById('gemini-modal');
+            const geminiModalTitle = document.getElementById('gemini-modal-title');
+            const geminiModalContent = document.getElementById('gemini-modal-content');
+            const closeGeminiModalBtn = document.getElementById('close-gemini-modal');
+
+            async function getGeminiResponse(prompt) {
+                const apiKey = ""; 
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+                
+                const payload = {
+                    contents: [{ role: "user", parts: [{ text: prompt }] }]
+                };
+
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!response.ok) {
+                       throw new Error(`API Error: ${response.status}`);
+                    }
+                    const result = await response.json();
+                    if (result.candidates && result.candidates.length > 0 && result.candidates[0].content.parts.length > 0) {
+                        return result.candidates[0].content.parts[0].text;
+                    }
+                    return "Sorry, I couldn't generate a response. Please try again.";
+                } catch (error) {
+                    console.error("Gemini API call failed:", error);
+                    return `An error occurred: ${error.message}. Please check the console for details.`;
+                }
+            }
+            
+            function showGeminiModal() {
+                geminiModal.style.display = 'flex';
+                geminiModalTitle.textContent = '✨ Gemini is thinking...';
+                geminiModalContent.innerHTML = `<div class="flex justify-center items-center h-48"><div class="spinner"></div></div>`;
+            }
+
+            function hideGeminiModal() {
+                geminiModal.style.display = 'none';
+            }
+
+            closeGeminiModalBtn.addEventListener('click', hideGeminiModal);
+
+            function calculateProgress() {
+                const allDays = planData.weeks.flatMap(w => w.days);
+                const completedDays = allDays.filter(d => d.completed).length;
+                const totalDays = allDays.length;
+                return { completedDays, totalDays };
+            }
+
+            function updateChart() {
+                const { completedDays, totalDays } = calculateProgress();
+                const remainingDays = totalDays - completedDays;
+                
+                progressChart.data.datasets[0].data = [completedDays, remainingDays];
+                progressChart.update();
+            }
+
+            function render() {
+                renderNav();
+                renderPlanContent();
+                updateChart();
+            }
+            
+            function renderNav() {
+                navContainer.innerHTML = '';
+                planData.weeks.forEach((week, index) => {
+                    const button = document.createElement('button');
+                    button.textContent = week.title;
+                    button.className = `p-3 rounded-lg font-semibold transition-colors duration-200 ${index === currentWeekIndex ? 'tab-active' : 'tab-inactive'}`;
+                    button.onclick = () => {
+                        currentWeekIndex = index;
+                        render();
+                    };
+                    navContainer.appendChild(button);
+                });
+            }
+
+            function renderPlanContent() {
+                planContainer.innerHTML = '';
+                const week = planData.weeks[currentWeekIndex];
+                
+                const weekContainer = document.createElement('div');
+                weekContainer.className = "bg-white p-6 rounded-xl shadow-md";
+                
+                const intro = document.createElement('p');
+                intro.textContent = week.intro;
+                intro.className = "text-slate-600 mb-6 border-l-4 border-teal-200 pl-4";
+                weekContainer.appendChild(intro);
+
+                week.days.forEach((day, dayIndex) => {
+                    const dayItem = document.createElement('div');
+                    dayItem.id = `day-${currentWeekIndex}-${dayIndex}`;
+                    dayItem.className = `border-l-4 border-slate-200 transition-colors duration-300 mb-2 ${day.completed ? 'completed-item' : ''}`;
+                    
+                    const header = document.createElement('button');
+                    header.className = 'w-full flex justify-between items-center text-left p-4 bg-slate-50 hover:bg-slate-100';
+                    header.innerHTML = `
+                        <span class="font-semibold text-slate-700">${day.title}</span>
+                        <div class="flex items-center space-x-2">
+                           <span class="completion-icon text-teal-500 font-bold text-xl">&#10003;</span>
+                           <span class="transform transition-transform duration-300 text-teal-600">&#9662;</span>
+                        </div>
+                    `;
+
+                    let geminiButtons = `
+                        <button data-prompt-type="explain" class="gemini-button text-xs bg-sky-100 text-sky-800 font-semibold px-3 py-1 rounded-full hover:bg-sky-200 transition-colors">✨ Explain Like I'm 10</button>
+                    `;
+                    if (day.hasCaseStudy) {
+                        geminiButtons += `
+                            <button data-prompt-type="case-study" class="gemini-button text-xs bg-amber-100 text-amber-800 font-semibold px-3 py-1 rounded-full hover:bg-amber-200 transition-colors">✨ Generate Case Study</button>
+                        `;
+                    }
+
+                    const content = document.createElement('div');
+                    content.className = 'accordion-content bg-white p-4';
+                    content.innerHTML = `
+                        <div class="mb-4">
+                            <h4 class="font-semibold text-teal-700 mb-2">Activity:</h4>
+                            <p class="text-slate-600">${day.activity}</p>
+                        </div>
+                        <div class="mb-4">
+                            <h4 class="font-semibold text-teal-700 mb-2">Key Questions:</h4>
+                            <p class="text-slate-600">${day.questions}</p>
+                        </div>
+                        <div class="flex flex-wrap gap-2 my-4">
+                           ${geminiButtons}
+                        </div>
+                        <button class="completion-button w-full mt-2 p-2 rounded-lg font-semibold text-sm transition-colors duration-200 bg-slate-200 text-slate-700 hover:bg-teal-500 hover:text-white">
+                           ${day.completed ? 'Mark as Incomplete' : 'Mark as Complete'}
+                        </button>
+                    `;
+
+                    header.onclick = () => {
+                        const icon = header.querySelector('.transform');
+                        if (content.style.maxHeight) {
+                            content.style.maxHeight = null;
+                            icon.style.transform = 'rotate(0deg)';
+                        } else {
+                            content.style.maxHeight = content.scrollHeight + "px";
+                            icon.style.transform = 'rotate(-180deg)';
+                        }
+                    };
+                    
+                    content.querySelector('.completion-button').onclick = (e) => {
+                        e.stopPropagation();
+                        day.completed = !day.completed;
+                        e.target.textContent = day.completed ? 'Mark as Incomplete' : 'Mark as Complete';
+                        dayItem.classList.toggle('completed-item', day.completed);
+                        updateChart();
+                    };
+
+                    content.querySelectorAll('.gemini-button').forEach(button => {
+                        button.onclick = async (e) => {
+                            e.stopPropagation();
+                            showGeminiModal();
+                            const promptType = e.target.dataset.promptType;
+                            const topic = day.title.split(': ')[1];
+                            let prompt, title;
+                            if (promptType === 'explain') {
+                                prompt = `Explain the strategic planning concept "${topic}" to me like I'm 10 years old. Use simple language and a clear analogy.`;
+                                title = `Explaining: ${topic}`;
+                            } else {
+                                prompt = `Generate a short, fictional case study about a company in Bangladesh applying the concept of "${topic}". The case study should be easy to understand and highlight the key steps or components of the concept. Make up a company name and a simple scenario.`;
+                                title = `Case Study: ${topic}`;
+                            }
+                            const responseText = await getGeminiResponse(prompt);
+                            geminiModalTitle.textContent = `✨ ${title}`;
+                            geminiModalContent.innerHTML = `<div class="prose max-w-none text-slate-700">${responseText.replace(/\n/g, '<br>')}</div>`;
+                        }
+                    });
+
+                    dayItem.appendChild(header);
+                    dayItem.appendChild(content);
+                    weekContainer.appendChild(dayItem);
+                });
+
+                planContainer.appendChild(weekContainer);
+            }
+
+            function renderResources() {
+                resourcesContainer.innerHTML = '';
+                planData.resources.forEach(resource => {
+                    const card = document.createElement('div');
+                    card.className = 'bg-slate-50 p-4 rounded-lg';
+                    let listItems = resource.items.map(item => `<li class="text-slate-600">${item}</li>`).join('');
+                    card.innerHTML = `
+                        <h3 class="font-bold text-teal-700 mb-2">${resource.type}</h3>
+                        <ul class="list-disc list-inside space-y-1">${listItems}</ul>
+                    `;
+                    resourcesContainer.appendChild(card);
+                });
+            }
+            
+            function initializeChart() {
+                const { completedDays, totalDays } = calculateProgress();
+                const remainingDays = totalDays - completedDays;
+
+                progressChart = new Chart(chartCanvas, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Completed', 'Remaining'],
+                        datasets: [{
+                            data: [completedDays, remainingDays],
+                            backgroundColor: ['#14b8a6', '#e2e8f0'],
+                            borderColor: ['#ffffff', '#ffffff'],
+                            borderWidth: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '70%',
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            tooltip: {
+                                enabled: false
+                            }
+                        }
+                    }
+                });
+            }
+
+            initializeChart();
+            renderResources();
+            render();
+        });
+    </script>
+</body>
+</html>
