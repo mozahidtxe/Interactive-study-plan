@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Chosen Palette: Calm Harmony -->
-    <!-- Application Structure Plan: The SPA is designed as an interactive dashboard to transform the static study plan into an engaging, task-oriented tool. The structure features a top navigation to switch between the four weeks, preventing information overload from a long scroll. Each week's content is presented in an accordion format, allowing users to focus on one day at a time. The core interactive element is a progress tracker, visualized by a donut chart, which updates as users mark topics "complete." This structure was chosen for its superior usability, providing a clear, focused, and motivating user flow that encourages completion of the learning journey. Gemini API features are integrated directly into daily tasks to provide contextual learning aids without disrupting the primary flow. -->
+    <!-- Application Structure Plan: The SPA is designed as an interactive dashboard to transform the static study plan into an engaging, task-oriented tool. The structure features a top navigation to switch between the four weeks, preventing information overload from a long scroll. Each week's content is presented in an accordion format, allowing users to focus on one day at a time. The core interactive element is a progress tracker, visualized by a donut chart, which updates as users mark topics "complete." This structure was chosen for its superior usability, providing a clear, focused, and motivating user flow that encourages completion of the learning journey. Gemini API features are integrated directly into daily tasks to provide contextual learning aids without disrupting the primary flow. Progress is saved to localStorage for persistence. -->
     <!-- Visualization & Content Choices: 
         - Report Info: Overall Progress -> Goal: Motivate -> Viz: Donut Chart -> Interaction: Updates on task completion -> Justification: Provides instant visual feedback on progress, enhancing user motivation. -> Library: Chart.js/Canvas.
         - Report Info: Weekly Structure -> Goal: Organize/Navigate -> Presentation: Tab-like Navigation -> Interaction: Click to show/hide weekly content sections -> Justification: Breaks down the 28-day plan into manageable, non-linear sections, improving navigation. -> Library/Method: HTML/JS.
@@ -18,6 +18,7 @@
         - Report Info: Task Completion -> Goal: Track -> Presentation: Button/Checkbox -> Interaction: Toggles completion state -> Justification: The primary interaction that makes the plan a functional tool rather than a static document. -> Library/Method: HTML/JS.
         - Report Info: Complex Concepts -> Goal: Simplify -> Presentation: Button + Modal -> Interaction: Click to call Gemini API and display simplified explanation -> Justification: Provides on-demand clarification of difficult topics, enhancing comprehension. -> Library/Method: Gemini API.
         - Report Info: Abstract Tools -> Goal: Contextualize -> Presentation: Button + Modal -> Interaction: Click to call Gemini API and generate a localized case study -> Justification: Connects theoretical frameworks to practical, relatable examples. -> Library/Method: Gemini API.
+        - Report Info: User Progress -> Goal: Persist -> Presentation: Buttons (Load/Clear) & Status Text -> Interaction: Auto-save on change, manual load/clear -> Justification: Allows users to save their progress across sessions using browser localStorage. -> Library/Method: HTML/JS (localStorage).
     -->
     <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
     <style>
@@ -71,10 +72,15 @@
             
             <section id="progress-tracker" class="bg-white p-6 rounded-xl shadow-md mb-8">
                 <h2 class="text-xl font-bold text-center mb-4 text-slate-700">Your Progress</h2>
-                 <p class="text-center text-slate-500 mb-4 max-w-2xl mx-auto">Welcome to your interactive guide, now enhanced with AI! Use the "Explain" button for simple definitions or "Generate Case Study" for real-world examples from Bangladesh, all powered by Gemini.</p>
+                 <p class="text-center text-slate-500 mb-4 max-w-2xl mx-auto">Welcome to your interactive guide, now enhanced with AI! Your progress is auto-saved. Use the "Explain" button for simple definitions or "Generate Case Study" for real-world examples from Bangladesh, all powered by Gemini.</p>
                 <div class="chart-container relative w-full max-w-xs mx-auto h-64">
                     <canvas id="progressChart"></canvas>
                 </div>
+                <div class="mt-6 text-center space-x-2">
+                    <button id="load-progress-btn" class="bg-slate-200 text-slate-700 font-semibold px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors">Reload Last Save</button>
+                    <button id="clear-progress-btn" class="bg-red-200 text-red-800 font-semibold px-4 py-2 rounded-lg hover:bg-red-300 transition-colors">Clear All Progress</button>
+                </div>
+                <p id="progress-status" class="text-center text-sm text-slate-500 mt-3 h-4"></p>
             </section>
 
             <nav id="week-navigation" class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-8">
@@ -145,6 +151,7 @@
                 ]
             };
 
+            const STORAGE_KEY = 'strategicPlanProgress';
             let currentWeekIndex = 0;
             let progressChart;
 
@@ -156,6 +163,9 @@
             const geminiModalTitle = document.getElementById('gemini-modal-title');
             const geminiModalContent = document.getElementById('gemini-modal-content');
             const closeGeminiModalBtn = document.getElementById('close-gemini-modal');
+            const loadProgressBtn = document.getElementById('load-progress-btn');
+            const clearProgressBtn = document.getElementById('clear-progress-btn');
+            const progressStatus = document.getElementById('progress-status');
 
             async function getGeminiResponse(prompt) {
                 const apiKey = ""; 
@@ -197,6 +207,52 @@
 
             closeGeminiModalBtn.addEventListener('click', hideGeminiModal);
 
+            function showStatusMessage(message, duration = 3000) {
+                progressStatus.textContent = message;
+                setTimeout(() => {
+                    progressStatus.textContent = '';
+                }, duration);
+            }
+
+            function saveProgress() {
+                const progressToSave = planData.weeks.map(week => 
+                    week.days.map(day => ({ id: day.id, completed: day.completed }))
+                );
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(progressToSave));
+                showStatusMessage('Progress auto-saved!', 2000);
+            }
+
+            function loadProgress() {
+                const savedProgress = localStorage.getItem(STORAGE_KEY);
+                if (savedProgress) {
+                    const parsedProgress = JSON.parse(savedProgress);
+                    planData.weeks.forEach((week, weekIndex) => {
+                        week.days.forEach((day, dayIndex) => {
+                            const savedDay = parsedProgress[weekIndex] && parsedProgress[weekIndex][dayIndex];
+                            if (savedDay && savedDay.id === day.id) {
+                                day.completed = savedDay.completed;
+                            }
+                        });
+                    });
+                    showStatusMessage('Progress loaded successfully.');
+                } else {
+                    showStatusMessage('No saved progress found.');
+                }
+                render();
+            }
+
+            function clearProgress() {
+                if (confirm('Are you sure you want to clear all your progress? This cannot be undone.')) {
+                    localStorage.removeItem(STORAGE_KEY);
+                    planData.weeks.forEach(week => week.days.forEach(day => day.completed = false));
+                    showStatusMessage('All progress has been cleared.');
+                    render();
+                }
+            }
+
+            loadProgressBtn.addEventListener('click', loadProgress);
+            clearProgressBtn.addEventListener('click', clearProgress);
+
             function calculateProgress() {
                 const allDays = planData.weeks.flatMap(w => w.days);
                 const completedDays = allDays.filter(d => d.completed).length;
@@ -208,8 +264,10 @@
                 const { completedDays, totalDays } = calculateProgress();
                 const remainingDays = totalDays - completedDays;
                 
-                progressChart.data.datasets[0].data = [completedDays, remainingDays];
-                progressChart.update();
+                if (progressChart) {
+                    progressChart.data.datasets[0].data = [completedDays, remainingDays];
+                    progressChart.update();
+                }
             }
 
             function render() {
@@ -304,6 +362,7 @@
                         e.target.textContent = day.completed ? 'Mark as Incomplete' : 'Mark as Complete';
                         dayItem.classList.toggle('completed-item', day.completed);
                         updateChart();
+                        saveProgress();
                     };
 
                     content.querySelectorAll('.gemini-button').forEach(button => {
@@ -381,7 +440,7 @@
 
             initializeChart();
             renderResources();
-            render();
+            loadProgress();
         });
     </script>
 </body>
